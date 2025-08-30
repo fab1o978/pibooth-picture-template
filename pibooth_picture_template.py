@@ -2,6 +2,7 @@
 
 """Pibooth plugin to customize the final picture layout using Flowchart Maker."""
 
+import os
 import zlib
 import base64
 import os.path as osp
@@ -16,16 +17,17 @@ from pibooth.utils import LOGGER
 from pibooth import pictures
 from pibooth.pictures.factory import PilPictureFactory
 
+from utils.lut import apply_cube_lut_preserve, load_cube_lut
 
-__version__ = "1.1.0"
-
+__version__ = "1.2.0"
 
 @pibooth.hookimpl
 def pibooth_configure(cfg):
     """Declare the new configuration options."""
     cfg.add_option('PICTURE', 'template', 'picture_template.xml',
                    "Pictures template path, it should contain 8 pages (4 capture numbers and 2 orientations)")
-
+    cfg.add_option('PICTURE', 'lut_file', 'picture_template.xml',
+                   "3D LUT to apply to each image")
 
 @pibooth.hookimpl
 def pibooth_reset(cfg, hard):
@@ -35,7 +37,6 @@ def pibooth_reset(cfg, hard):
         LOGGER.info("Generate picture template file in '%s'", template_path)
         with open(template_path, 'w') as fp:
             fp.write(DEFAULT)
-
 
 @pibooth.hookimpl
 def pibooth_setup_picture_factory(cfg, factory):
@@ -49,7 +50,17 @@ def pibooth_setup_picture_factory(cfg, factory):
         if orientation == pictures.AUTO:
             orientation = cfg.template.get_best_orientation(factory._images)
 
-        return TemplatePictureFactory(cfg.template, orientation, *factory._images)
+        lut, lut_size = None, None
+
+        lut_path = cfg.get('PICTURE', 'lut_file', fallback=None)
+        if lut_path and os.path.exists(lut_path):
+            try:
+                lut, lut_size = load_cube_lut(lut_path)
+                print(f"[template] LUT loaded: {lut_path} (size {lut_size})")
+            except Exception as e:
+                print(f"[template] Error loading LUT: {e}")
+
+        return TemplatePictureFactory(cfg.template, orientation, *factory._images, lut=lut, lut_size=lut_size)
 
 
 def px(cin, dpi=600):
@@ -336,8 +347,10 @@ class TemplateShapeParser(object):
 
 class TemplatePictureFactory(PilPictureFactory):
 
-    def __init__(self, template, orientation, *images):
+    def __init__(self, template, orientation, *images, lut=None, lut_size=None):
         self.template = template
+        self.lut = lut
+        self.lut_size = lut_size
         self.orientation = orientation
         size = self.template.get_size(len(images), self.orientation)
         super(TemplatePictureFactory, self).__init__(size[0], size[1], *images)
@@ -412,6 +425,12 @@ class TemplatePictureFactory(PilPictureFactory):
                     continue  # No image available for this index
 
                 src_image = self._images[index]
+
+                if self.lut is not None and src_image is not None:
+                    try:
+                         src_image = apply_cube_lut_preserve(src_image, self.lut, self.lut_size)
+                    except Exception as e:
+                        print(f"[template] Error applying LUT: {e}")
                 src_image, width, height = self._image_resize_keep_ratio(src_image,
                                                                          shape.width,
                                                                          shape.height,
