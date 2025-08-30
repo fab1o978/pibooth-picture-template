@@ -24,10 +24,20 @@ __version__ = "1.2.0"
 @pibooth.hookimpl
 def pibooth_configure(cfg):
     """Declare the new configuration options."""
+
+    try:
+        choices = [f for f in os.listdir("/home/pi/.config/pibooth/luts") if f.lower().endswith(".cube")]
+    except FileNotFoundError:
+        choices = []
+
+    # aggiungi l'opzione "none" all'inizio
+    choices = ["none"] + sorted(choices)
+
+    default = "none"
     cfg.add_option('PICTURE', 'template', 'picture_template.xml',
                    "Pictures template path, it should contain 8 pages (4 capture numbers and 2 orientations)")
-    cfg.add_option('PICTURE', 'lut_file', 'picture_template.xml',
-                   "3D LUT to apply to each image")
+    cfg.add_option('PICTURE', 'lut_file', '',
+                   "3D LUT to apply to each image", "LUT file path", choices)
 
 @pibooth.hookimpl
 def pibooth_reset(cfg, hard):
@@ -52,13 +62,16 @@ def pibooth_setup_picture_factory(cfg, factory):
 
         lut, lut_size = None, None
 
-        lut_path = cfg.get('PICTURE', 'lut_file', fallback=None)
+        lut_path = os.path.join("/home/pi/.config/pibooth/luts/", cfg.get('PICTURE', 'lut_file', fallback=None))
+
         if lut_path and os.path.exists(lut_path):
             try:
                 lut, lut_size = load_cube_lut(lut_path)
                 print(f"[template] LUT loaded: {lut_path} (size {lut_size})")
             except Exception as e:
                 print(f"[template] Error loading LUT: {e}")
+        else:
+            print("LUT not found")
 
         return TemplatePictureFactory(cfg.template, orientation, *factory._images, lut=lut, lut_size=lut_size)
 
@@ -269,7 +282,6 @@ class TemplateParser(object):
         :type orientation: str
         """
         return [shape for shape in self.get_rects(capture_number, orientation) if shape.type == TemplateShapeParser.TYPE_TEXT]
-
 
 class TemplateShapeParser(object):
 
