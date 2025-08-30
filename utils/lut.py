@@ -27,14 +27,12 @@ def load_cube_lut(path):
                     triplets.append([float(parts[0]), float(parts[1]), float(parts[2])])
 
     if size is None:
-        # deduci dalla quantit� di triplette
         n = int(round(len(triplets) ** (1.0/3.0)))
         if n**3 != len(triplets):
             raise ValueError(f"Impossibile dedurre LUT_3D_SIZE da {len(triplets)} valori")
         size = n
 
     lut = np.asarray(triplets, dtype=np.float32).reshape((size, size, size, 3))
-    # file .cube = B (veloce), poi G, poi R ? rimappa a [R,G,B]
     lut = np.transpose(lut, (2, 1, 0, 3))  # [r, g, b, 3]
     return lut, size # , domain_min, domain_max
 
