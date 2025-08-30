@@ -288,7 +288,7 @@ class TemplateShapeParser(object):
         return f"Shape(text='{self.text}', type={self.type})"
 
     def parse_text(self, mxcell_node):
-        """Extarct text.
+        """Extract text.
 
         :param mxcell_node: 'mxCell' node
         :type mxcell_node: :py:class:`ElementTree.Element`
@@ -333,7 +333,6 @@ class TemplateShapeParser(object):
             width = px(geometry.attrib.get('width', 0), dpi)
             height = px(geometry.attrib.get('height', 0), dpi)
         return x, y, width, height
-
 
 class TemplatePictureFactory(PilPictureFactory):
 
@@ -417,9 +416,27 @@ class TemplatePictureFactory(PilPictureFactory):
                                                                          shape.width,
                                                                          shape.height,
                                                                          self._crop)
+                
+                # Border radius
+                if shape.style.get("rounded") == "1":
+                    self.border_radius = int(shape.style.get("arcSize", "0")) * 10
+                else:
+                    self.border_radius = 0
+
+                # Shadow
+                if shape.style.get("shadow") == "1":
+                    # blur
+                    self.shadow_blur = int(shape.style.get("shadowBlur", "24"))
+
+                    # opacity
+                    self.shadow_opacity = int(shape.style.get("shadowOpacity", "30"))
+                else:
+                    self.shadow_blur = 0
+                    self.shadow_opacity = 0
+
                 rect = Image.new('RGBA', (shape.width, shape.height), (255, 0, 0, 0))
                 self._image_paste(src_image, rect, (shape.width - width) // 2, (shape.height - height) // 2)
-                self._image_paste(rect, image, shape.x, shape.y, shape.rotation)
+                self._image_paste(rect, image, shape.x, shape.y, shape.rotation, self.border_radius, self.shadow_blur, self.shadow_opacity)
 
             elif shape.type == TemplateShapeParser.TYPE_TEXT:
                 index = int(shape.text) - 1
