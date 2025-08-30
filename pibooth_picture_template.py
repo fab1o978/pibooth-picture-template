@@ -350,40 +350,34 @@ class TemplatePictureFactory(PilPictureFactory):
         raise NotImplementedError("Not applicable for template")
 
     def _image_paste(self, image, dest_image, pos_x, pos_y,
-                    angle=None, border_radius=50,
-                    shadow_opacity=30, shadow_spread=12, shadow_blur=24):
-        # dimensioni slot (prima di eventuale rotazione)
+                    angle=None, border_radius=0, shadow_blur=24,
+                    shadow_opacity=30, shadow_spread=12):
+
         slot_w, slot_h = image.size
 
-        # la sorgente deve avere alpha per usare la sua maschera quando serve
         if image.mode != "RGBA":
             image = image.convert("RGBA")
 
-        # maschera arrotondata
         mask = None
+
         if border_radius and border_radius > 0:
             r = int(min(border_radius, min(slot_w, slot_h) // 2))
             mask = Image.new("L", (slot_w, slot_h), 0)
             d = ImageDraw.Draw(mask)
             d.rounded_rectangle([0, 0, slot_w, slot_h], radius=r, fill=255)
 
-        # rotazione (immagine + maschera)
         if angle:
             image = image.rotate(angle, expand=True, resample=Image.BICUBIC)
             if mask is not None:
                 mask = mask.rotate(angle, expand=True, resample=Image.BICUBIC)
 
-        # centratura come nell?originale
         off_x = pos_x + (slot_w - image.width) // 2
         off_y = pos_y + (slot_h - image.height) // 2
 
-        # incolla la foto (usa mask arrotondata se c?�, altrimenti l?alpha della sorgente quando ruotata)
         paste_mask = mask if mask is not None else (image.split()[3] if angle is not None else None)
         dest_image.paste(image, (off_x, off_y), paste_mask)
 
-        # ---- INNER SHADOW (senza alpha_composite) ----
         if mask is not None and shadow_opacity > 0:
-            # anello: maschera piena - maschera rientrata
             ring = mask.copy()
             d = ImageDraw.Draw(ring)
             inset = int(max(0, shadow_spread))
@@ -396,16 +390,12 @@ class TemplatePictureFactory(PilPictureFactory):
             if shadow_blur > 0:
                 ring = ring.filter(ImageFilter.GaussianBlur(radius=shadow_blur))
 
-            # scala opacit� dell?ombra
             alpha_scaled = ring.point(lambda p: int(p * (shadow_opacity / 255.0)))
 
-            # crea un ?pezzo? d?ombra posizionato dove sta la foto
             shadow_piece = Image.new("RGBA", image.size, (0, 0, 0, 0))
             black = Image.new("RGBA", image.size, (0, 0, 0, 255))
             shadow_piece.putalpha(alpha_scaled)  # alpha = ring scalato, colore = nero
 
-            # composita l?ombra sul dest qualunque sia il suo mode (RGB o RGBA)
-            # NB: usare paste con se stessa come mask evita il problema "wrong mode"
             dest_image.paste(shadow_piece, (off_x, off_y), shadow_piece)    
     
     def _build_matrix(self, image):
